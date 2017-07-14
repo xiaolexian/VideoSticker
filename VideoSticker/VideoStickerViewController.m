@@ -499,9 +499,9 @@ typedef void (^StickerVideoOutputCompletion)(NSURL *outputUrl, NSError *error);
     CGFloat widthFactor = videoSize.width / viewSize.width;
     CGFloat heightFactor = videoSize.height / viewSize.height;
     
-    // 坐标系变换
-    CGFloat imgPosX = (stickerImgView.frame.origin.x + stickerImgView.bounds.size.width/2) * widthFactor;
-    CGFloat imgPosY = (viewSize.height - (stickerImgView.frame.origin.y + stickerImgView.bounds.size.height/2)) * heightFactor;
+    // 坐标系变换: frame的x、y、w、h在经过矩阵变换以后都不准确了，必须要小心
+    CGFloat imgPosX = stickerImgView.center.x * widthFactor;
+    CGFloat imgPosY = (viewSize.height - stickerImgView.center.y) * heightFactor;
     CGFloat imgWidth = stickerImgView.bounds.size.width * widthFactor;
     CGFloat imgHeight = stickerImgView.bounds.size.height * heightFactor;
     
@@ -512,19 +512,28 @@ typedef void (^StickerVideoOutputCompletion)(NSURL *outputUrl, NSError *error);
     
     CGAffineTransform t = stickerImgView.transform;
     
-    // 进行旋转
+    /*
+     * 有两种方法进行缩放和旋转
+     */
+    
+    // 第一种方法：由于两个坐标系不一样，z轴是相反的，所以需要将之前旋转的角度，反向旋转回去
+    // 比如，在之前的坐标系旋转了45度，那么，现在在一个方向的z轴坐标系中，先反向旋转45度，那么只是等于没有旋转了，继续反向旋转45度，那么就对了！
+    // 因此需要将原来的矩阵选择角度反向旋转2倍回去
     CGFloat radius = atan2f(t.b, t.a);
-    imageLayer.transform = CATransform3DRotate(imageLayer.transform, radius, 0.0, 0.0, -1.0);
+    t = CGAffineTransformRotate(t, -2*radius);
+    imageLayer.transform = CATransform3DMakeAffineTransform(t);
     
-    // 进行缩放
-    CGFloat scaleX = sqrt(t.a * t.a + t.c * t.c);
-    CGFloat scaleY = sqrt(t.b * t.b + t.d * t.d);
-    imageLayer.transform = CATransform3DScale(imageLayer.transform, scaleX, scaleY, 1.0f);
+    // 第二种方法：这个方法更好理解，就是将之前的旋转和缩放都放到新的坐标系操作一遍即可
+//    // 进行旋转
+//    CGFloat radius = atan2f(t.b, t.a);
+//    imageLayer.transform = CATransform3DRotate(imageLayer.transform, radius, 0.0, 0.0, -1.0);
+//    
+//    // 进行缩放
+//    CGFloat scaleX = sqrt(t.a * t.a + t.c * t.c);
+//    CGFloat scaleY = sqrt(t.b * t.b + t.d * t.d);
+//    imageLayer.transform = CATransform3DScale(imageLayer.transform, scaleX, scaleY, 1.0f);
     
-    // TODO: 坐标还有一些差距，应该是旋转角度还需要考虑进来
-    CGFloat imgPosOffsetX = imgWidth * (scaleX - 1) / 2;
-    CGFloat imgPosOffsetY = imgHeight * (scaleY - 1) / 2;
-    imageLayer.position = CGPointMake(imgPosX + imgPosOffsetX, imgPosY - imgPosOffsetY);
+    imageLayer.position = CGPointMake(imgPosX, imgPosY);
     
     return imageLayer;
 }
